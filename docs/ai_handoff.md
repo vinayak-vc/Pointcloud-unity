@@ -1,60 +1,26 @@
-# AI Handoff — Pointcloud-unity
+# AI Handoff - Pointcloud-unity
 
-## Latest Session (2026-07-02) — Initial PointForge → Unity integration
+## Latest Session (2026-07-02) - C++ Parity and Convert Integration
 
-Implemented Phases 1–3 (and parts of 4) of the integration plan: PointForge
-compiled as a native DLL, consumed by a new Unity plugin in this repo.
-Read docs/architecture.md first; decisions.md explains every non-obvious
-choice (D1–D8).
+Implemented missing features to achieve parity with the C++ PointForge viewer, and migrated the dataset conversion process to a native DLL to ensure compatibility with Unity's IL2CPP backend.
 
-### PointForge repo side (separate repo!)
-`C:\UnrealProject\PointForge`, branch **`library/unity`**, commit `2965fc8`:
-- `src/library/unity/PointForgeC.h/.cpp` — flat C API (PF_OpenProject,
-  PF_UpdateCamera, PF_GetVisibleNodes, PF_DequeueLoadedNode,
-  PF_ReleaseLoadedNode, PF_UnloadNode, PF_GetEvictionCandidates,
-  PF_GetStatistics, PF_GetNodeInfo, PF_SetLogCallback, PF_GetVersion,
-  PF_CloseProject). pfcore untouched.
-- CMake target `pfunity` (option `PF_BUILD_UNITY_PLUGIN`, default ON).
-- Build used:
-  `cmake --build build-static --config Release --target pfunity`
-  (static triplet; output `build-static/Release/PointForgeUnity.dll`).
-- Smoke-tested natively against `C:\UnrealProject\model\PointForgeCache_direct`
-  (1024 nodes, 12.4M points): traversal, streaming, stats, eviction all OK.
+### PointForgeConvert.dll Integration
+- Added PointForgeConvert.dll to Plugins/x86_64/.
+- Updated PointForgeNative.cs to P/Invoke PF_ConvertDataset and PF_Convert_SetLogCallback.
+- Converted PointForgeViewerUI.cs to use Task.Run instead of System.Diagnostics.Process to run conversions asynchronously in the background.
+- Conversion logs now stream back via a native callback, keeping the Unity UI perfectly responsive.
 
-### This repo — files created
-- `Plugins/x86_64/PointForgeUnity.dll` (copy of the build above)
-- `Runtime/PointForge.Runtime.asmdef` (allowUnsafeCode)
-- `Runtime/Native/PointForgeNative.cs` — P/Invoke, POD structs (keep in sync
-  with PointForgeC.h)
-- `Runtime/PointForgeProject.cs` — handle wrapper, native log pump
-- `Runtime/PointForgePointCloud.cs` — [ExecuteAlways] streaming manager +
-  Graphics.RenderPrimitives renderer, per-node GraphicsBuffers, LRU eviction
-- `Runtime/Shaders/PointForgePoints.shader` — URP opaque point-quad shader
-- `Editor/PointForge.Editor.asmdef`, `Editor/PointForgeWindow.cs` — menu
-  "PointForge > Viewer", panels Project/Scene View/Statistics/Rendering/
-  Streaming/Console
-- `docs/*` — this documentation set
+### Parity Features Added
+- **Measure Tool**: Added a multi-segment distance measurement tool (PointForgeCameraController.cs). Uses Camera.ScreenPointToRay intersecting with the point cloud's Bounds for now as a fallback since exact point-picking requires reading back the depth buffer.
+- **Eye-Dome Lighting (EDL)**: Added a post-processing URP ScriptableRendererFeature (PointForgeEDLFeature.cs). Configured to use RTHandle and Blitter for compatibility with modern URP (Unity 2022+).
+- **Round Points**: Added a toggle for rendering points as circles instead of squares.
+- **Advanced Rendering Quality**: Exposed clipping planes and advanced SSE budgets in the UI.
 
-### Verification state — IMPORTANT
-The native DLL is verified (standalone smoke test). The **Unity side has NOT
-been compiled or run inside the Unity editor this session** (files written
-externally). First action next session:
-1. Open the project in Unity 6000.3.9f1, let it compile; fix any compile
-   errors (most likely spots: `AOT.MonoPInvokeCallback` attribute,
-   `Marshal.PtrToStringUTF8`, `FindFirstObjectByType` availability, shader
-   include path).
-2. PointForge > Viewer → open `C:\UnrealProject\model\PointForgeCache_direct`.
-3. Confirm: metadata panel populates, orange bbox gizmo visible, points render
-   in Scene view, Statistics update as the camera moves.
+### Recent Fixes
+- Fixed URP compatibility compilation errors by adding Unity.RenderPipelines.Universal.Runtime and Unity.RenderPipelines.Core.Runtime to PointForge.Runtime.asmdef.
+- Fixed a bug where scriptableRendererData could not be accessed directly by using Resources.FindObjectsOfTypeAll<PointForgeEDLFeature>() to find the active asset.
+- Fixed a double to loat cast error when calculating bounds in PointForgeCameraController.cs.
 
-### Known gaps
-- No DepthOnly/DepthNormals pass (URP SSAO/shadows/depth prepass blind to points).
-- Orthographic scene cameras pause streaming (native SSE is perspective-only).
-- No buffer pooling yet; GraphicsBuffers are created/disposed per node churn.
-- LOD visualization + intensity/classification color modes pending (data
-  already sits in the vertex buffer's `packedExtra`).
-
-### Next recommended task
-In-editor verification (above), then LOD-level debug coloring (add
-`_ColorMode` to the shader; level can be passed per node via the
-MaterialPropertyBlock at upload time).
+### Next Recommended Task
+- Improve the measurement tool's accuracy. Currently it raycasts against the bounding box plane. A true depth-buffer readback (via AsyncGPUReadback) or a CPU-side octree query is needed to pick exact point coordinates.
+- Implement the remaining LOD visualization + intensity/classification color modes.
