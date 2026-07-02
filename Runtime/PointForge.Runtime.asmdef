@@ -1,0 +1,14 @@
+{
+    "name": "PointForge.Runtime",
+    "rootNamespace": "ViitorCloud.PointForge",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
